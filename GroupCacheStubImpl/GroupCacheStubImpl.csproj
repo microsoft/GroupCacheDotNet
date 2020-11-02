@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(EnvironmentConfig)" />
+  <PropertyGroup>
+    <ProjectGuid>{F5BC79D1-0A24-42C6-87F1-1BCB8DE09279}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AssemblyName>GroupCacheStub.GroupCacheStubImpl</AssemblyName>
+    <AssemblyTitle>GroupCacheStub.GroupCacheStubImpl</AssemblyTitle>
+    <AssemblyCompany>MSIT</AssemblyCompany>
+    <AssemblyProduct>GroupCacheStub.GroupCacheStubImpl</AssemblyProduct>
+    <AssemblyCopyright>Copyright © MSIT 2014, 2015</AssemblyCopyright>
+    <RootNamespace>GroupCacheStub</RootNamespace>
+    <AssemblyClsCompliant>false</AssemblyClsCompliant>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <BuildArchitecture>amd64</BuildArchitecture>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <Import Project="$(ModulesRoot)\DSInfra.Common.Library\exports-full.props" />
+  <ItemGroup>
+    <Reference Include="log4net, Version=2.0.8.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Nuget\packages\log4net.2.0.8\lib\net45-full\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Owin, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Nuget\packages\Microsoft.Owin.4.0.0\lib\net451\Microsoft.Owin.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Owin.Host.HttpListener, Version=3.0.1.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Nuget\packages\Microsoft.Owin.Host.HttpListener.3.0.1\lib\net45\Microsoft.Owin.Host.HttpListener.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Owin.Hosting, Version=3.0.1.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Nuget\packages\Microsoft.Owin.Hosting.3.0.1\lib\net45\Microsoft.Owin.Hosting.dll</HintPath>
+    </Reference>
+    <Reference Include="Owin, Version=1.0.0.0, Culture=neutral, PublicKeyToken=f0ebd12fd5e55cc5, processorArchitecture=MSIL">
+      <HintPath>..\..\..\Nuget\packages\Owin.1.0\lib\net40\Owin.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.XML" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Xml.Serialization" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Place binary file -->
+    <Binplace Include="$(O)\$(AssemblyName).dll">
+      <DestinationFolder>$(BinplaceLocalLibPath)</DestinationFolder>
+    </Binplace>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Log4NetLoggerAdapter.cs" />
+    <Compile Include="OwinClient.cs" />
+    <Compile Include="OwinPoolPicker.cs" />
+    <Compile Include="OwinServer.cs" />
+    <Compile Include="OwinPool.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GroupCache\GroupCache.csproj">
+      <Project>{db346326-0380-48b2-9ca1-233750548759}</Project>
+      <Name>GroupCache</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <Import Project="$(ExtendedTargetsPath)\Microsoft.CSharp.targets" />
+</Project>
