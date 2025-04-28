@@ -1,0 +1,38 @@
+﻿// --------------------------------------------------------------------------------------------------------------------
+// <copyright file="IGroupStat.cs" company="Microsoft Corporation">
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+// </copyright>
+// --------------------------------------------------------------------------------------------------------------------
+
+namespace GroupCache
+{
+    using System;
+
+    /// <summary>
+    /// Interface used to observe GroupCache internal operations
+    /// This would be used to collect counters for monitoring.
+    /// </summary>
+    public interface IGroupStat
+    {
+        void TraceGets(string groupName); // any Get request, including from peers
+
+        void TraceCacheHits(string groupName); // either cache was good
+
+        void TracePeerLoads(string groupName); // either remote load or remote cache hit (not an error)
+
+        void TraceLoadsDeduped(string groupName); // after singleflight
+
+        void TraceLocalLoads(string groupName); // total good local loads
+
+        void TraceServerRequests(string groupName); // gets that came over the network from peers
+
+        void TraceRoundtripLatency(string groupName, TimeSpan ts);
+
+        void TraceRetry(string groupName);
+
+        void TraceItemOverCapacity(string groupName);
+
+        void TraceConcurrentServerRequests(int v);
+    }
+}

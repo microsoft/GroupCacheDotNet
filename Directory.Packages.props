@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+	  <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- GroupCache -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0" />
+	<PackageVersion Include="StyleCop.Analyzers" Version="1.1.118" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading" Version="16.4.45" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="16.4.45" />
+    <PackageVersion Include="Microsoft.VisualStudio.Validation" Version="15.3.15" />
+    <PackageVersion Include="Microsoft.Win32.Registry" Version="4.5.0" />
+    <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.2" />
+    <PackageVersion Include="System.Security.AccessControl" Version="4.5.0" />
+    <PackageVersion Include="System.Security.Principal.Windows" Version="4.5.0" />
+    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.5.3" />
+    <!-- GroupCacheStubImpl -->
+    <PackageVersion Include="log4net" Version="2.0.10" />
+    <PackageVersion Include="Microsoft.Owin" Version="4.2.2" />
+    <PackageVersion Include="Microsoft.Owin.Host.HttpListener" Version="4.2.2" />
+    <PackageVersion Include="Microsoft.Owin.Hosting" Version="4.2.2" />
+    <!-- GroupCacheStubTest -->
+    <PackageVersion Include="Microsoft.Owin" Version="4.2.2" />
+    <PackageVersion Include="xunit" Version="2.6.6" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.7" />
+  </ItemGroup>
+</Project>
