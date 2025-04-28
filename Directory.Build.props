@@ -1,0 +1,38 @@
+<!--
+  This file is imported by any project that imports Microsoft.Common.props
+-->
+<Project>
+  <PropertyGroup>
+    <!-- Treat all warnings as errors for stricter code quality -->
+    <!-- <TreatWarningsAsErrors>true</TreatWarningsAsErrors> -->
+
+    <!-- Enable deterministic builds for reproducibility -->
+    <Deterministic>true</Deterministic>
+
+    <!-- Enable Source Link if using a supported provider (optional, comment out if not needed) -->
+    <!-- <PublishRepositoryUrl>true</PublishRepositoryUrl> -->
+    <!-- <EmbedUntrackedSources>true</EmbedUntrackedSources> -->
+
+    <!-- Enable nullable reference types for new code (uncomment if desired) -->
+    <!-- <Nullable>enable</Nullable> -->
+
+    <!-- Enable analyzers (already referenced in Directory.Packages.props) -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)\stylecop.json" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>GroupCacheStub.GroupCacheStubImpl</AssemblyName>
+    <AssemblyTitle>GroupCacheStub.GroupCacheStubImpl</AssemblyTitle>
+    <RootNamespace>GroupCacheStub</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+	<Reference Include="System.Net.Http" />
+	<PackageReference Include="log4net" />
+    <PackageReference Include="Microsoft.Owin" />
+    <PackageReference Include="Microsoft.Owin.Host.HttpListener" />
+    <PackageReference Include="Microsoft.Owin.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GroupCache\GroupCache.csproj" />
+  </ItemGroup>
+</Project>
