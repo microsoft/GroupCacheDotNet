@@ -101,22 +101,20 @@ namespace GroupCacheStubTest
 
     public class TestGroupCache : IDisposable
     {
-        private readonly GroupCacheStub.OwinPool peer1Pool;
-        private readonly GroupCacheStub.OwinPool peer2Pool;
+        private readonly GroupCacheStub.KestrelPool peer1Pool;
+        private readonly GroupCacheStub.KestrelPool peer2Pool;
 
         public TestGroupCache()
         {
-            var peer1 = new PeerEndpoint { HostName = "localhost", Port = 60053 };
-            var peer2 = new PeerEndpoint { HostName = "localhost", Port = 60054 };
-            var peerList = new List<PeerEndpoint> { peer1, peer2 };
+            var peer1 = new PeerEndpoint { HostName = "127.0.0.1", Port = 0 };
+            var peer2 = new PeerEndpoint { HostName = "127.0.0.1", Port = 0 };
+            this.peer1Pool = new GroupCacheStub.KestrelPool(peer1, concurrencyLimit: 256);
+            this.peer2Pool = new GroupCacheStub.KestrelPool(peer2, concurrencyLimit: 256);
+            var peerList = new List<PeerEndpoint> { this.peer1Pool.Endpoint, this.peer2Pool.Endpoint };
 
-            // server listening on port 50053
-            this.peer1Pool = new GroupCacheStub.OwinPool(peer1);
             this.peer1Pool.GetPicker("TestGroupForwarding").Add(peerList);
             this.peer1Pool.GetPicker("Fibonacci").Add(peerList);
 
-            // server listening on port 50054
-            this.peer2Pool = new GroupCacheStub.OwinPool(peer2);
             this.peer2Pool.GetPicker("TestGroupForwarding").Add(peerList);
             this.peer2Pool.GetPicker("Fibonacci").Add(peerList);
         }
@@ -128,7 +126,7 @@ namespace GroupCacheStubTest
         }
 
         [Fact]
-        public void TestGroupForwarding()
+        public async Task TestGroupForwardingAsync()
         {
             var getter1 = new HelloGetter { PeerName = "peer1" };
             var getter2 = new HelloGetter { PeerName = "peer2" };
@@ -140,15 +138,21 @@ namespace GroupCacheStubTest
             var group2Stat = new UnitTestGroupStat();
             peer1Group.Stats = group1Stat;
             peer2Group.Stats = group2Stat;
+            Xunit.Assert.Equal(
+                this.peer1Pool.GetPicker("TestGroupForwarding").PickPeers("foo", 1)[0].Endpoint,
+                this.peer2Pool.GetPicker("TestGroupForwarding").PickPeers("foo", 1)[0].Endpoint);
+            Xunit.Assert.Equal(
+                this.peer1Pool.GetPicker("TestGroupForwarding").PickPeers("bar", 1)[0].Endpoint,
+                this.peer2Pool.GetPicker("TestGroupForwarding").PickPeers("bar", 1)[0].Endpoint);
             using (var result1a = new MemoryStream())
             using (var result1b = new MemoryStream())
             using (var result2a = new MemoryStream())
             using (var result2b = new MemoryStream())
             {
-                peer1Group.GetAsync("foo", result1a, new CacheControl(), CancellationToken.None).Wait();
-                peer1Group.GetAsync("bar", result1b, new CacheControl(), CancellationToken.None).Wait();
-                peer2Group.GetAsync("foo", result2a, new CacheControl(), CancellationToken.None).Wait();
-                peer2Group.GetAsync("bar", result2b, new CacheControl(), CancellationToken.None).Wait();
+                await peer1Group.GetAsync("foo", result1a, new CacheControl(), CancellationToken.None);
+                await peer1Group.GetAsync("bar", result1b, new CacheControl(), CancellationToken.None);
+                await peer2Group.GetAsync("foo", result2a, new CacheControl(), CancellationToken.None);
+                await peer2Group.GetAsync("bar", result2b, new CacheControl(), CancellationToken.None);
                 var result1aStr = result1a.StreamToString();
                 Xunit.Assert.Equal(fooResponse, result1aStr);
                 var result1bStr = result1b.StreamToString();
@@ -164,13 +168,13 @@ namespace GroupCacheStubTest
             using (var result4a = new MemoryStream())
             using (var result4b = new MemoryStream())
             {
-                peer1Group.GetAsync("foo", result3a, new CacheControl(), CancellationToken.None).Wait();
+                await peer1Group.GetAsync("foo", result3a, new CacheControl(), CancellationToken.None);
                 result3a.Position = 0;
-                peer1Group.GetAsync("bar", result3b, new CacheControl(), CancellationToken.None).Wait();
+                await peer1Group.GetAsync("bar", result3b, new CacheControl(), CancellationToken.None);
                 result3b.Position = 0;
-                peer2Group.GetAsync("foo", result4a, new CacheControl(), CancellationToken.None).Wait();
+                await peer2Group.GetAsync("foo", result4a, new CacheControl(), CancellationToken.None);
                 result4a.Position = 0;
-                peer2Group.GetAsync("bar", result4b, new CacheControl(), CancellationToken.None).Wait();
+                await peer2Group.GetAsync("bar", result4b, new CacheControl(), CancellationToken.None);
                 result4b.Position = 0;
             }
 

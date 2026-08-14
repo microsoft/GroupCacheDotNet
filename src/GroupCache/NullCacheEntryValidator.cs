@@ -7,6 +7,7 @@
 
 namespace GroupCache
 {
+    using System;
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
@@ -51,6 +52,12 @@ namespace GroupCache
         }
 
         /// <inheritdoc/>
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            return this.sink.FlushAsync(cancellationToken);
+        }
+
+        /// <inheritdoc/>
         public override int Read(byte[] buffer, int offset, int count)
         {
             return this.sink.Read(buffer, offset, count);
@@ -78,6 +85,20 @@ namespace GroupCache
         public override void Write(byte[] buffer, int offset, int count)
         {
             this.sink.Write(buffer, offset, count);
+        }
+
+        /// <inheritdoc/>
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return this.sink.WriteAsync(buffer, offset, count, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            return this.sink.WriteAsync(buffer, cancellationToken);
         }
     }
 }
