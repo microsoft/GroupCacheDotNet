@@ -15,11 +15,16 @@ namespace GroupCache
 
     public sealed class MemoryCacheEntry : ICacheEntry
     {
-        private ArraySegment<byte> segment;
+        private readonly MemoryCacheValue value;
 
         public MemoryCacheEntry(ArraySegment<byte> segment)
+            : this(new MemoryCacheValue(segment, CacheEntryMetadata.Empty))
         {
-            this.segment = segment;
+        }
+
+        internal MemoryCacheEntry(MemoryCacheValue value)
+        {
+            this.value = value;
         }
 
         /// <inheritdoc/>
@@ -36,7 +41,13 @@ namespace GroupCache
         /// <inheritdoc/>
         public Stream Value()
         {
-            return new MemoryStream(this.segment.Array, this.segment.Offset, this.segment.Count);
+            ArraySegment<byte> segment = this.value.Bytes;
+            return new MemoryStream(segment.Array, segment.Offset, segment.Count);
+        }
+
+        internal void ApplyMetadata(ICacheControl cacheControl)
+        {
+            this.value.Metadata.Apply(cacheControl);
         }
     }
 
@@ -44,23 +55,23 @@ namespace GroupCache
     {
         private const int DefaultCopyBufferSize = 81920;
         private readonly SingleFlight<ICacheEntry> createEntry = new SingleFlight<ICacheEntry>();
-        private readonly LRUCache<string, ArraySegment<byte>> cache;
+        private readonly LRUCache<string, MemoryCacheValue> cache;
 
         public MemoryCache(int maxItemCount, TimeSpan ttl)
         {
-            this.cache = new LRUCache<string, ArraySegment<byte>>(maxItemCount, ttl);
+            this.cache = new LRUCache<string, MemoryCacheValue>(maxItemCount, ttl);
             this.cache.ItemOverCapacity += this.TriggerItemCapacity;
         }
 
         public MemoryCache(int maxItemCount = 200, ulong capacity = 0)
         {
-            this.cache = new LRUCache<string, ArraySegment<byte>>(maxItemCount, capacity);
+            this.cache = new LRUCache<string, MemoryCacheValue>(maxItemCount, capacity);
             this.cache.ItemOverCapacity += this.TriggerItemCapacity;
         }
 
         public MemoryCache(int maxItemCount, ulong capacity, TimeSpan ttl)
         {
-            this.cache = new LRUCache<string, ArraySegment<byte>>(maxItemCount, EqualityComparer<string>.Default, capacity, ttl);
+            this.cache = new LRUCache<string, MemoryCacheValue>(maxItemCount, EqualityComparer<string>.Default, capacity, ttl);
             this.cache.ItemOverCapacity += this.TriggerItemCapacity;
         }
 
@@ -74,9 +85,13 @@ namespace GroupCache
         /// <param name="valueFactory">valueFactory should write result to the stream but not close it.</param>
         /// <param name="ct">Cancellation token.</param>
         /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
-        public Task<ICacheEntry> GetOrAddAsync(string key, Func<string, Stream, ICacheControl, Task> valueFactory, ICacheControl cacheControl, CancellationToken ct)
+        public async Task<ICacheEntry> GetOrAddAsync(
+            string key,
+            Func<string, Stream, ICacheControl, Task> valueFactory,
+            ICacheControl cacheControl,
+            CancellationToken ct)
         {
-            return this.createEntry.DoAsync(key, async () =>
+            ICacheEntry entry = await this.createEntry.DoAsync(key, async () =>
             {
                 ICacheEntry found = await this.GetAsync(key, ct).ConfigureAwait(false);
                 if (!(found is EmptyCacheEntry))
@@ -92,29 +107,28 @@ namespace GroupCache
                     buffer = new ArraySegment<byte>(memStream.ToArray());
                 }
 
+                var value = new MemoryCacheValue(buffer, CacheEntryMetadata.Capture(cacheControl));
                 if (!cacheControl.NoStore)
                 {
-                    this.cache.Add(key, buffer, (ulong)buffer.Count);
+                    this.cache.Add(key, value, (ulong)buffer.Count);
                 }
 
-                return new MemoryCacheEntry(buffer);
-            });
+                return new MemoryCacheEntry(value);
+            }).ConfigureAwait(false);
+
+            ((MemoryCacheEntry)entry).ApplyMetadata(cacheControl);
+            return entry;
         }
 
         public Task<ICacheEntry> GetAsync(string key, CancellationToken ct)
         {
-            var found = this.cache.TryGetValue(key, out ArraySegment<byte> bytes);
+            var found = this.cache.TryGetValue(key, out MemoryCacheValue value);
             if (!found)
             {
                 return Task.FromResult<ICacheEntry>(new EmptyCacheEntry());
             }
 
-            return Task.FromResult<ICacheEntry>(new MemoryCacheEntry(bytes));
-        }
-
-        private void TriggerItemCapacity(KeyValuePair<string, ArraySegment<byte>> kv)
-        {
-            this.ItemOverCapacity?.Invoke(kv.Key);
+            return Task.FromResult<ICacheEntry>(new MemoryCacheEntry(value));
         }
 
         /// <inheritdoc/>
@@ -123,5 +137,23 @@ namespace GroupCache
             this.cache.Remove(key);
             return Task.CompletedTask;
         }
+
+        private void TriggerItemCapacity(KeyValuePair<string, MemoryCacheValue> kv)
+        {
+            this.ItemOverCapacity?.Invoke(kv.Key);
+        }
+    }
+
+    internal sealed class MemoryCacheValue
+    {
+        public MemoryCacheValue(ArraySegment<byte> bytes, CacheEntryMetadata metadata)
+        {
+            this.Bytes = bytes;
+            this.Metadata = metadata;
+        }
+
+        public ArraySegment<byte> Bytes { get; }
+
+        public CacheEntryMetadata Metadata { get; }
     }
 }

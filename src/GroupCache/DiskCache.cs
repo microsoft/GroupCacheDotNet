@@ -42,7 +42,10 @@ namespace GroupCache
         {
             lock (this.@lock)
             {
-                this.dirs.Add(directoryPath, new Dictionary<string, byte[]>());
+                if (!this.dirs.ContainsKey(directoryPath))
+                {
+                    this.dirs.Add(directoryPath, new Dictionary<string, byte[]>());
+                }
             }
         }
 
@@ -169,21 +172,33 @@ namespace GroupCache
         /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
         public async Task<string> WriteAtomicAsync(Func<Stream, CancellationToken, Task> copyAsync, string tmpPath, CancellationToken ct)
         {
-            while (true)
+            string randomPath = this.GenerateRandomFilePath(tmpPath);
+            bool created = false;
+            try
             {
-                try
+                await using (var fileStream = new FileStream(
+                    randomPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 81920,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan))
                 {
-                    var randomPath = this.GenerateRandomFilePath(tmpPath);
-                    using (var fileStream = File.Create(randomPath))
-                    {
-                        await copyAsync(fileStream, ct).ConfigureAwait(false);
-                    }
+                    created = true;
+                    await copyAsync(fileStream, ct).ConfigureAwait(false);
+                    await fileStream.FlushAsync(ct).ConfigureAwait(false);
+                }
 
-                    return randomPath;
-                }
-                catch
+                return randomPath;
+            }
+            catch
+            {
+                if (created)
                 {
+                    File.Delete(randomPath);
                 }
+
+                throw;
             }
         }
 
@@ -223,6 +238,7 @@ namespace GroupCache
     // Items still referenced by clients but erased from the cache are in neither list.
     public class DiskCacheEntry : ICacheEntry
     {
+        private readonly CacheEntryMetadata metadata;
         private readonly DiskCache ownerCache;
 
         public string Key { get; private set; }
@@ -234,11 +250,17 @@ namespace GroupCache
         internal bool InCache = true; // Whether entry is in the cache.
 
         public DiskCacheEntry(string key, string entryPath, DiskCache owner)
+            : this(key, entryPath, owner, CacheEntryMetadata.Empty)
+        {
+        }
+
+        internal DiskCacheEntry(string key, string entryPath, DiskCache owner, CacheEntryMetadata metadata)
         {
             Debug.Assert(entryPath != string.Empty, "entryPath should not be empty");
             this.EntryPath = entryPath;
             this.ownerCache = owner;
             this.Key = key;
+            this.metadata = metadata;
         }
 
         /// <summary>
@@ -273,11 +295,15 @@ namespace GroupCache
         {
             return this.ownerCache.ReleaseAsync(this);
         }
+
+        internal void ApplyMetadata(ICacheControl cacheControl)
+        {
+            this.metadata.Apply(cacheControl);
+        }
     }
 
     public class DiskCache : ICache
     {
-        private readonly SingleFlight<DiskCacheEntry> concurrentRequest = new SingleFlight<DiskCacheEntry>();
         public static readonly ICacheEntry EMPTY = new EmptyCacheEntry();
         private readonly AsyncReaderWriterLock rwLock = new AsyncReaderWriterLock();
 
@@ -304,6 +330,11 @@ namespace GroupCache
 
         public DiskCache(string cacheRootPath, int maxEntryCount, IFileSystem fs = null)
         {
+            if (maxEntryCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxEntryCount));
+            }
+
             this.cacheRootPath = cacheRootPath;
             this.cacheTmpPath = Path.Combine(this.cacheRootPath, "tmp");
             this.fs = fs;
@@ -322,57 +353,51 @@ namespace GroupCache
 
         public async Task ReleaseAsync(DiskCacheEntry entry)
         {
-            int refCount;
-
-            // If InCache == false this is called from FinishErase with _lock already held and cause deadlock
             if (Volatile.Read(ref entry.InCache))
             {
                 using (await this.rwLock.WriteLockAsync())
                 {
-                    // entry is in "_inUse" and refcount is between 1 .. N
-                    // Call Unref inside the lock to avoid other thread incrementing concurrently
-                    refCount = entry.Unref();
-                    if (refCount == 1)
+                    if (Volatile.Read(ref entry.InCache))
                     {
-                        // Entry is still in cache but no longer in use.
-                        if (this.inUse.TryRemove(entry.Key, out _))
+                        // Call Unref inside the lock so a cache lookup cannot increment the entry concurrently.
+                        int refCount = entry.Unref();
+                        if (refCount == 1)
                         {
-                            this.lruCache.Add(entry.Key, entry);
+                            if (this.inUse.TryRemove(entry.Key, out _))
+                            {
+                                this.lruCache.Add(entry.Key, entry);
+                            }
                         }
-                    }
 
-                    if (refCount <= 0)
-                    {
-                        this.inUse.TryRemove(entry.Key, out _);
-                        entry.Delete();
+                        if (refCount <= 0)
+                        {
+                            this.inUse.TryRemove(entry.Key, out _);
+                            this.lruCache.Remove(entry.Key);
+                            entry.Delete();
+                        }
+
                         return;
                     }
                 }
             }
-            else
+
+            // Once an entry leaves the cache, no new references can be acquired and releases only decrement.
+            int erasedEntryRefCount = entry.Unref();
+            if (erasedEntryRefCount == 0)
             {
-                // its safe to decrment unref because Entry is not in cache anymore and refcount can only decrease now
-                if (entry.Refs > 0)
-                {
-                    refCount = entry.Unref();
-                    if (refCount == 0)
-                    {
-                        this.inUse.TryRemove(entry.Key, out _);
-                        entry.Delete();
-                        return;
-                    }
-                }
+                entry.Delete();
             }
         }
 
         /// <inheritdoc/>
         public async Task<ICacheEntry> GetOrAddAsync(string key, Func<string, Stream, ICacheControl, Task> valueFactory, ICacheControl cacheControl, CancellationToken ct)
         {
-            using (await this.rwLock.ReadLockAsync())
+            using (await this.rwLock.WriteLockAsync())
             {
                 ICacheEntry found = this.GetInternal(key);
                 if (!(found is EmptyCacheEntry))
                 {
+                    ((DiskCacheEntry)found).ApplyMetadata(cacheControl);
                     found.Ref(); // this entry remain valid after releasing the lock
                     return found;
                 }
@@ -383,24 +408,28 @@ namespace GroupCache
                 ICacheEntry found = this.GetInternal(key);
                 if (!(found is EmptyCacheEntry))
                 {
+                    ((DiskCacheEntry)found).ApplyMetadata(cacheControl);
                     found.Ref(); // this entry remain valid after releasing the lock
                     return found;
                 }
 
                 var randomPath = await this.fs.WriteAtomicAsync((sink, cancel) => valueFactory(key, sink, cacheControl), this.cacheTmpPath, ct).ConfigureAwait(false);
-                var tmpEntry = new DiskCacheEntry(key, randomPath, this);
-                if (!cacheControl.NoStore)
+                var tmpEntry = new DiskCacheEntry(key, randomPath, this, CacheEntryMetadata.Capture(cacheControl));
+                if (cacheControl.NoStore)
                 {
-                    this.SetInternal(key, tmpEntry);
+                    Volatile.Write(ref tmpEntry.InCache, false);
+                    tmpEntry.Ref();
+                    return tmpEntry;
                 }
 
+                this.SetInternal(key, tmpEntry);
                 var entry = this.GetInternal(key);
                 entry.Ref();
                 return entry;
             }
         }
 
-        // Calling thread need to be first lock "_lock"
+        // Calling thread must hold the write lock because this method moves entries between collections.
         private ICacheEntry GetInternal(string key)
         {
             var inUse = this.inUse.TryGetValue(key, out DiskCacheEntry entry);
@@ -425,7 +454,7 @@ namespace GroupCache
 
         public async Task<ICacheEntry> GetAsync(string key, CancellationToken ct)
         {
-            using (await this.rwLock.ReadLockAsync())
+            using (await this.rwLock.WriteLockAsync())
             {
                 ICacheEntry entry = this.GetInternal(key);
                 entry.Ref();
@@ -445,8 +474,7 @@ namespace GroupCache
                     this.FinishErase(key, entry);
                 }
 
-                var inUse = this.inUse.TryGetValue(key, out entry);
-                if (inUse)
+                if (this.inUse.TryRemove(key, out entry))
                 {
                     this.FinishErase(key, entry);
                 }
@@ -485,13 +513,16 @@ namespace GroupCache
 
         // Entry  has already been removed from the hash table
         // Finish removing from cache
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits", Justification = "<Pending>")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Usage",
+            "VSTHRD002:Avoid problematic synchronous waits",
+            Justification = "Eviction is synchronous and InCache=false keeps ReleaseAsync on its non-blocking path.")]
         private void FinishErase(string key, DiskCacheEntry entry)
         {
             if (entry != null)
             {
                 Volatile.Write(ref entry.InCache, false);
-                entry.DisposeAsync().Wait(); // not inside LRU cache anymore
+                entry.DisposeAsync().GetAwaiter().GetResult();
             }
         }
 
